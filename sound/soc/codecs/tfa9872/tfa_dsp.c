@@ -4640,7 +4640,7 @@ enum tfa_error tfa_start(int next_profile, int *vstep)
 		tfa_cont_close(dev); /* close all of them */
 	}
 
-	return err;
+	return (enum tfa_error)err;
 
 error_exit:
 	if (dev < devcount)
@@ -4650,7 +4650,7 @@ error_exit:
 	for (dev = 0; dev < devcount; dev++)
 		tfa_cont_close(dev); /* close all of them */
 
-	return err;
+	return (enum tfa_error)err;
 }
 
 enum tfa_error tfa_stop(void)
@@ -4717,7 +4717,7 @@ error_exit:
 	for (dev = 0; dev < devcount; dev++)
 		tfa_cont_close(dev); /* close all of them */
 
-	return err;
+	return (enum tfa_error)err;
 }
 
 /*
@@ -4775,7 +4775,7 @@ enum tfa_error tfa_reset(void)
 		tfa_cont_close(dev);
 	}
 
-	return err;
+	return (enum tfa_error)err;
 }
 
 /*

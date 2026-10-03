@@ -139,7 +139,14 @@ static struct bg_iostat_attr bg_iostat_attr_##name = { \
 typedef uid_t appid_t;
 
 appid_t get_appid(const char *key);
+#ifdef CONFIG_SDCARD_FS
 void uid_to_packagename(u32 uid, char* output, int buf_size);
+#else
+static void uid_to_packagename(u32 uid, char* output, int buf_size)
+{
+	snprintf(output, buf_size, "<uid - %u>", uid % 10000);
+}
+#endif
 
 static void inline update_daily_writes(struct uid_entry *entry) {
 	entry->last_fg_write_bytes = entry->io[UID_STATE_FOREGROUND].write_bytes;

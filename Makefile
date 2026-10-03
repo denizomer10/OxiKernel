@@ -779,14 +779,16 @@ KBUILD_CFLAGS	+= -march=armv8-a+crypto+crc+sha2+aes -mtune=cortex-a53 \
 endif
 
 ifdef CONFIG_LLVM_POLLY
-KBUILD_CFLAGS	+= -mllvm -polly \
-		   -mllvm -polly-run-dce \
-		   -mllvm -polly-run-inliner \
-		   -mllvm -polly-opt-fusion=max \
-		   -mllvm -polly-ast-use-context \
-		   -mllvm -polly-detect-keep-going \
-		   -mllvm -polly-vectorizer=stripmine \
-		   -mllvm -polly-invariant-load-hoisting
+# cc-option: Polly exists only in the Proton Clang bundle, not in stock LLVM;
+# skip the tuning flags silently on compilers that lack them.
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -polly)
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -polly-run-dce)
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -polly-run-inliner)
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -polly-opt-fusion=max)
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -polly-ast-use-context)
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -polly-detect-keep-going)
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -polly-vectorizer=stripmine)
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -polly-invariant-load-hoisting)
 endif
 else ifeq ($(cc-name),gcc)
 ifeq ($(CONFIG_SOC_EXYNOS9610), y)
@@ -800,8 +802,10 @@ endif
 
 ifdef CONFIG_INLINE_OPTIMIZATION
 ifeq ($(cc-name),clang)
-KBUILD_CFLAGS	+= -mllvm -inline-threshold=1000
-KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=750
+# cc-option: stock LLVM dropped -mllvm -inlinehint-threshold; only apply the
+# tuning flags the active compiler actually understands.
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -inline-threshold=1000)
+KBUILD_CFLAGS	+= $(call cc-option,-mllvm -inlinehint-threshold=750)
 else ifeq ($(cc-name),gcc)
 KBUILD_CFLAGS	+= --param max-inline-insns-single=600
 KBUILD_CFLAGS	+= --param max-inline-insns-auto=750
@@ -1056,6 +1060,18 @@ endif
 
 # disallow errors like 'EXPORT_GPL(foo);' with missing header
 KBUILD_CFLAGS   += $(call cc-option,-Werror=implicit-int)
+# Diagnostics that newer clang enables by default (some as hard errors) but
+# that 4.14-era code trips routinely; keep them non-fatal on modern toolchains.
+KBUILD_CFLAGS   += $(call cc-disable-warning,enum-constexpr-conversion)
+KBUILD_CFLAGS   += $(call cc-disable-warning,single-bit-bitfield-constant-conversion)
+KBUILD_CFLAGS   += $(call cc-disable-warning,incompatible-function-pointer-types)
+KBUILD_CFLAGS   += $(call cc-disable-warning,compound-token-split-by-macro)
+# Legacy-4.14 bulk classes that newer clang diagnoses: same suppression set
+# mainline Linux adopted for clang, plus clang-22's const-aggregate-init
+# pedantry over the kernel's deliberate partial initializers.
+KBUILD_CFLAGS   += $(call cc-disable-warning,unused-but-set-variable)
+KBUILD_CFLAGS   += $(call cc-disable-warning,default-const-init-field-unsafe)
+KBUILD_CFLAGS   += $(call cc-disable-warning,default-const-init-var-unsafe)
 
 # require functions to have arguments in prototypes, not empty 'int foo()'
 KBUILD_CFLAGS   += $(call cc-option,-Werror=strict-prototypes)

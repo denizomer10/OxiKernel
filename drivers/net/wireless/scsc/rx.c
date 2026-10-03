@@ -1000,7 +1000,7 @@ void slsi_scan_complete(struct slsi_dev *sdev, struct net_device *dev, u16 scan_
 	int *result_count = NULL, max_count = 0;
 	struct cfg80211_scan_info info = {.aborted = aborted};
 	int scan_results_count = 0;
-	int more_than_max_count = 0;
+	int more_than_max_count __maybe_unused = 0;
 #if !(defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
 	struct list_head    *pos, *q, *blacklist_pos, *blacklist_q;
 #endif
@@ -1887,7 +1887,7 @@ int slsi_send_roam_vendor_event(struct slsi_dev *sdev, const u8 *bssid,
 				const u8 *req_ie, u32 req_ie_len, const u8 *resp_ie, u32 resp_ie_len,
 				const u8 *beacon_ie, u32 beacon_ie_len, bool authorized)
 {
-	bool                                   is_secured_bss;
+	bool                                   is_secured_bss __maybe_unused;
 	struct sk_buff                         *skb = NULL;
 	u8 err = 0;
 

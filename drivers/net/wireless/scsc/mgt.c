@@ -3734,7 +3734,7 @@ int slsi_band_update(struct slsi_dev *sdev, int band)
 		if ((ndev_vif->activated) && (ndev_vif->vif_type == FAPI_VIFTYPE_STATION) &&
 		    (ndev_vif->sta.vif_status == SLSI_VIF_STATUS_CONNECTING || ndev_vif->sta.vif_status == SLSI_VIF_STATUS_CONNECTED) &&
 		    (ndev_vif->chan->hw_value <= 14 ? band == SLSI_FREQ_BAND_5GHZ : band == SLSI_FREQ_BAND_2GHZ)) {
-			int r;
+			int r __maybe_unused;
 
 			if (!ndev_vif->sta.sta_bss) {
 				SLSI_ERR(sdev, "slsi_mlme_disconnect failed, sta_bss is not available\n");
@@ -5571,7 +5571,7 @@ void slsi_roam_channel_cache_add(struct slsi_dev *sdev, struct net_device *dev, 
 		chan = ieee80211_frequency_to_channel(freq);
 
 	if (chan) {
-		enum nl80211_band band = NL80211_BAND_2GHZ;
+		enum nl80211_band band __maybe_unused = NL80211_BAND_2GHZ;
 
 		if (chan > 14)
 			band = NL80211_BAND_5GHZ;
@@ -5601,7 +5601,6 @@ void slsi_roam_channel_cache_prune(struct net_device *dev, int seconds, char *ss
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct list_head *pos, *q;
 	unsigned long now = jiffies;
-	unsigned long age;
 	int i = 0;
 
 	if (ssid) {
@@ -5617,7 +5616,6 @@ void slsi_roam_channel_cache_prune(struct net_device *dev, int seconds, char *ss
 	} else {
 		list_for_each_safe(pos, q, &ndev_vif->sta.network_map) {
 			network_map = list_entry(pos, struct slsi_roaming_network_map_entry, list);
-			age = (now - network_map->last_seen_jiffies) / HZ;
 			for (i = 1; i <= 38; i++) {
 				if (time_after_eq(now, network_map->channel_jiffies[i] + (seconds * HZ))) {
 					if (i <= 14)

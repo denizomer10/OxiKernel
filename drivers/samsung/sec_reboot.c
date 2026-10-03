@@ -17,8 +17,6 @@
 #include <linux/input.h>
 #endif
 #include <linux/sec_ext.h>
-#include "../battery_v2/include/sec_battery.h"
-#include <linux/sec_batt.h>
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -85,84 +83,69 @@ void sec_set_reboot_magic(int magic, int offset, int mask)
 	exynos_pmu_write(SEC_DEBUG_MAGIC_INFORM, tmp);
 }
 
+#define SEC_POWEROFF_KEY_RELEASE_TIMEOUT_MS	(5000)
+
 static void sec_power_off(void)
 {
 	int poweroff_try = 0;
-	union power_supply_propval ac_val, usb_val, wpc_val, water_val;
 	int powerkey_gpio = -1;
+	int waited_ms = 0;
 	struct device_node *np, *pp;
 
 	np = of_find_node_by_path("/gpio_keys");
-	if (!np)
-		return;
-	for_each_child_of_node(np, pp) {
-		uint keycode = 0;
-		if (!of_find_property(pp, "gpios", NULL))
-			continue;
-		of_property_read_u32(pp, "linux,code", &keycode);
-		if (keycode == KEY_POWER) {
-			pr_info("%s: <%u>\n", __func__,  keycode);
-			powerkey_gpio = of_get_gpio(pp, 0);
-			break;
+	if (!np) {
+		pr_warn("%s: gpio_keys node not found, power off anyway\n", __func__);
+	} else {
+		for_each_child_of_node(np, pp) {
+			uint keycode = 0;
+			if (!of_find_property(pp, "gpios", NULL))
+				continue;
+			of_property_read_u32(pp, "linux,code", &keycode);
+			if (keycode == KEY_POWER) {
+				pr_info("%s: <%u>\n", __func__,  keycode);
+				powerkey_gpio = of_get_gpio(pp, 0);
+				break;
+			}
 		}
-	}
-	of_node_put(np);
+		of_node_put(np);
 
-	if (!gpio_is_valid(powerkey_gpio)) {
-		pr_err("Couldn't find power key node\n");
-		return;
+		if (!gpio_is_valid(powerkey_gpio))
+			pr_warn("%s: Couldn't find power key node, power off anyway\n", __func__);
 	}
 
 	local_irq_disable();
 
-	sec_set_reboot_magic(SEC_REBOOT_LPM, SEC_REBOOT_END_OFFSET, 0xFF);
-	psy_do_property("ac", get, POWER_SUPPLY_PROP_ONLINE, ac_val);
-	psy_do_property("ac", get, POWER_SUPPLY_EXT_PROP_WATER_DETECT, water_val);
-	psy_do_property("usb", get, POWER_SUPPLY_PROP_ONLINE, usb_val);
-	psy_do_property("wireless", get, POWER_SUPPLY_PROP_ONLINE, wpc_val);
-	pr_info("[%s] AC[%d], USB[%d], WPC[%d], WATER[%d]\n",
-			__func__, ac_val.intval, usb_val.intval, wpc_val.intval, water_val.intval);
+	sec_set_reboot_magic(SEC_REBOOT_DEFAULT, SEC_REBOOT_END_OFFSET, 0xFF);
 
 	sec_debug_clear_magic_rambase();
 
 	flush_cache_all();
 
-	while (1) {
-		/* Check reboot charging */
-#ifdef CONFIG_SAMSUNG_BATTERY
-		if ((ac_val.intval || water_val.intval || usb_val.intval || wpc_val.intval || (poweroff_try >= 5)) && !lpcharge) {
-#else
-		if ((ac_val.intval || water_val.intval || usb_val.intval || wpc_val.intval || (poweroff_try >= 5))) {
-#endif
-			exynos_pmu_write(SEC_DEBUG_PANIC_INFORM, SEC_RESET_REASON_UNKNOWN);
-			pr_emerg("%s: charger connected or power off failed(%d), reboot!\n", __func__, poweroff_try);
-			/* To enter LP charging */
-
-			mach_restart(REBOOT_SOFT, "sw reset");
-
-			pr_emerg("%s: waiting for reboot\n", __func__);
-			while (1)
-				;
-		}
-
-		/* wait for power button release */
-		if (gpio_get_value(powerkey_gpio)) {
-			exynos_acpm_reboot();
-
-			pr_emerg("%s: set PS_HOLD low\n", __func__);
-			exynos_pmu_update(EXYNOS_PMU_PS_HOLD_CONTROL, 0x1<<8, 0x0);
-
-			++poweroff_try;
-			pr_emerg
-				("%s: Should not reach here! (poweroff_try:%d)\n",
-				 __func__, poweroff_try);
-		} else {
-		/* if power button is not released, wait and check TA again */
+	if (gpio_is_valid(powerkey_gpio)) {
+		/* Wait (bounded) for the power key to be released so a still-held
+		 * key cannot immediately power the device back on. The wait must
+		 * stay bounded: usermode is frozen at this point, so an endless
+		 * wait would starve the hardware watchdog and the resulting reset
+		 * would make "power off" look like a reboot. */
+		while (!gpio_get_value(powerkey_gpio) &&
+		       waited_ms < SEC_POWEROFF_KEY_RELEASE_TIMEOUT_MS) {
 			pr_info("%s: PowerButton is not released.\n", __func__);
+			mdelay(100);
+			waited_ms += 100;
 		}
-		mdelay(1000);
 	}
 
+	while (1) {
+		exynos_acpm_reboot();
+
+		pr_emerg("%s: set PS_HOLD low\n", __func__);
+		exynos_pmu_update(EXYNOS_PMU_PS_HOLD_CONTROL, 0x1<<8, 0x0);
+
+		++poweroff_try;
+		pr_emerg("%s: Should not reach here! (poweroff_try:%d)\n",
+			 __func__, poweroff_try);
+		mdelay(100);
+	}
 }
 
 static void sec_reboot(enum reboot_mode reboot_mode, const char *cmd)
@@ -172,6 +155,19 @@ static void sec_reboot(enum reboot_mode reboot_mode, const char *cmd)
 	pr_emerg("%s (%d, %s)\n", __func__, reboot_mode, cmd ? cmd : "(null)");
 
 	sec_debug_clear_magic_rambase();
+
+	if (cmd && (!strcmp(cmd, "shutdown") || !strcmp(cmd, "poweroff") ||
+			!strcmp(cmd, "pwroff") || !strcmp(cmd, "halt"))) {
+		/*
+		 * Some Android 16 userspace builds deliver sys.powerctl=shutdown
+		 * through the restart path with a cmd string instead of
+		 * RB_POWER_OFF. Route it to a real power off so "Power off" never
+		 * ends in a SWRESET reboot.
+		 */
+		pr_emerg("%s: shutdown cmd ('%s') on restart path, powering off\n",
+			 __func__, cmd);
+		sec_power_off();
+	}
 
 	/* LPM mode prevention */
 	sec_set_reboot_magic(SEC_REBOOT_NORMAL, SEC_REBOOT_END_OFFSET, 0xFF);

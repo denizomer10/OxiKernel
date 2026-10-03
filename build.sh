@@ -13,6 +13,11 @@ BUILD_CONFIG_DIR="$TOP/arch/arm64/configs"
 SUB_CONFIG_DIR="$TOP/kernel/configs"
 
 # Toolchain options
+# Backend "system": distro LLVM (Debian/Ubuntu: clang-22 + lld-22) with the
+# distro cross binutils/libgcc. This is the default.
+# Backend "proton": the pinned denizomer1/proton-clang 13 bundle (historical
+# reference toolchain). Select with: OXIKERNEL_TOOLCHAIN=proton ./build.sh ...
+BUILD_TOOLCHAIN="${OXIKERNEL_TOOLCHAIN:-system}"
 BUILD_PREF_COMPILER="clang"
 
 # Build variables - DO NOT CHANGE
@@ -61,21 +66,85 @@ merge_config() {
 VERIFY_TOOLCHAIN() {
     script_echo " "
 
-    if [ -d "$TOOLCHAIN" ]; then
-        script_echo "I: Toolchain found at repository root"
+    # Cross prefixes must be exported before probing for cross binutils;
+    # the kernel Makefile derives clang's --gcc-toolchain/--prefix from
+    # "which aarch64-linux-gnu-elfedit".
+    export CROSS_COMPILE="aarch64-linux-gnu-"
+    export CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
+
+    if [ "$BUILD_TOOLCHAIN" = "proton" ]; then
+        if [ -d "$TOOLCHAIN" ]; then
+            script_echo "I: Proton Clang toolchain found at repository root"
+        else
+            script_echo "I: Toolchain not found at repository root"
+            script_echo "   Downloading Proton Clang from denizomer1/proton-clang..."
+            git clone 'https://github.com/denizomer1/proton-clang.git' "$TOOLCHAIN" --depth 1 2>&1 | sed 's/^/     /'
+        fi
+
+        export PATH="${TOOLCHAIN}/bin:$PATH"
+        export LD_LIBRARY_PATH="${TOOLCHAIN}/lib:$LD_LIBRARY_PATH"
+
+        # Proton Clang 13
+        CC_BIN="clang"
+        CXX_BIN="clang++"
     else
-        script_echo "I: Toolchain not found at repository root"
-        script_echo "   Downloading Proton Clang from denizomer1/proton-clang..."
-        git clone 'https://github.com/denizomer1/proton-clang.git' "$TOOLCHAIN" --depth 1 2>&1 | sed 's/^/     /'
+        # System LLVM: versioned distro binaries (Debian names).
+        CC_BIN="clang-22"
+        CXX_BIN="clang++-22"
+        for tool in "$CC_BIN" "$CXX_BIN" ld.lld-22 llvm-ar-22 llvm-nm-22 \
+                    llvm-objcopy-22 llvm-objdump-22 llvm-strip-22 llvm-ranlib-22; do
+            if ! command -v "$tool" > /dev/null 2>&1; then
+                script_echo "E: $tool not found!"
+                script_echo "   Install the distro LLVM toolchain, e.g.:"
+                script_echo "   sudo apt install clang-22 lld-22 llvm-22 \\"
+                script_echo "        binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \\"
+                script_echo "        gcc-aarch64-linux-gnu"
+                script_echo "   or rerun with OXIKERNEL_TOOLCHAIN=proton."
+                exit_script
+            fi
+        done
+        script_echo "I: System LLVM backend: $($CC_BIN --version | head -n 1)"
+        if ! command -v "${CROSS_COMPILE}elfedit" > /dev/null 2>&1; then
+            script_echo "E: ${CROSS_COMPILE}elfedit not found (cross binutils missing)."
+            exit_script
+        fi
     fi
 
-    export PATH="${TOOLCHAIN}/bin:$PATH"
-	export LD_LIBRARY_PATH="${TOOLCHAIN}/lib:$LD_LIBRARY_PATH"
+    export CC="$CC_BIN"
 
-    # Proton Clang 13
-    export CROSS_COMPILE="aarch64-linux-gnu-"
-	export CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
-	export CC="$BUILD_PREF_COMPILER"
+    if [ "$BUILD_TOOLCHAIN" = "proton" ]; then
+        LD_BIN="ld.lld"
+        AR_BIN="llvm-ar"
+        NM_BIN="llvm-nm"
+        RANLIB_BIN="llvm-ranlib"
+        OBJCOPY_BIN="llvm-objcopy"
+        OBJDUMP_BIN="llvm-objdump"
+        STRIP_BIN="llvm-strip"
+    else
+        LD_BIN="ld.lld-22"
+        AR_BIN="llvm-ar-22"
+        NM_BIN="llvm-nm-22"
+        RANLIB_BIN="llvm-ranlib-22"
+        OBJCOPY_BIN="llvm-objcopy-22"
+        OBJDUMP_BIN="llvm-objdump-22"
+        STRIP_BIN="llvm-strip-22"
+    fi
+
+    MAKE_COMPILER_VARS=(
+        CC="$CC_BIN"
+        HOSTCC="$CC_BIN -Qunused-arguments --ld-path=/usr/bin/ld"
+        HOSTCXX="$CXX_BIN -Qunused-arguments --ld-path=/usr/bin/ld"
+        AR="$AR_BIN"
+        NM="$NM_BIN"
+        RANLIB="$RANLIB_BIN"
+        OBJCOPY="$OBJCOPY_BIN"
+        OBJDUMP="$OBJDUMP_BIN"
+        STRIP="$STRIP_BIN"
+        LD="$LD_BIN"
+        LDLLD="$LD_BIN"
+        LLVM_AR="$AR_BIN"
+        LLVM_NM="$NM_BIN"
+    )
 }
 VERIFY_DEFCONFIG() {
     if [ ! -f "$BUILD_CONFIG_DIR/$BUILD_DEVICE_CONFIG" ]; then
@@ -110,9 +179,9 @@ BUILD_KERNEL() {
 
     script_echo " "
 
-    make -C "$TOP" CC="$BUILD_PREF_COMPILER" HOSTCC="clang -Qunused-arguments --ld-path=/usr/bin/ld" HOSTCXX="clang++ -Qunused-arguments --ld-path=/usr/bin/ld" AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip "$BUILD_DEVICE_TMP_CONFIG" LOCALVERSION="$LOCALVERSION" 2>&1 | sed 's/^/     /' || exit_script
-    make -C "$TOP" CC="$BUILD_PREF_COMPILER" HOSTCC="clang -Qunused-arguments --ld-path=/usr/bin/ld" HOSTCXX="clang++ -Qunused-arguments --ld-path=/usr/bin/ld" AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip -j1 drivers/net/wireless/scsc/ LOCALVERSION="$LOCALVERSION" 2>&1 | sed 's/^/     /' || exit_script
-    make -C "$TOP" CC="$BUILD_PREF_COMPILER" HOSTCC="clang -Qunused-arguments --ld-path=/usr/bin/ld" HOSTCXX="clang++ -Qunused-arguments --ld-path=/usr/bin/ld" AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip -j$JOBS LOCALVERSION="$LOCALVERSION" 2>&1 | sed 's/^/     /' || exit_script
+    make -C "$TOP" "${MAKE_COMPILER_VARS[@]}" "$BUILD_DEVICE_TMP_CONFIG" LOCALVERSION="$LOCALVERSION" 2>&1 | sed 's/^/     /' || exit_script
+    make -C "$TOP" "${MAKE_COMPILER_VARS[@]}" -j1 drivers/net/wireless/scsc/ LOCALVERSION="$LOCALVERSION" 2>&1 | sed 's/^/     /' || exit_script
+    make -C "$TOP" "${MAKE_COMPILER_VARS[@]}" -j$JOBS LOCALVERSION="$LOCALVERSION" 2>&1 | sed 's/^/     /' || exit_script
 
     if [ ! -f "$TOP/arch/arm64/boot/Image" ]; then
         script_echo "E: Image not built successfully!"
@@ -223,6 +292,10 @@ KERNEL_CMDLINE="skip_initramfs $KERNEL_CMDLINE"
 # Increase hardware watchdog timeout from 15s to 60s (prevents early boot panic on Exynos9610)
 KERNEL_CMDLINE="s3c2410_wdt.tmr_margin=60 $KERNEL_CMDLINE"
 
+# Match the known-good (15.08.2026) boot.img cmdline: disable watchdog-driven
+# early-boot resets and hardlockup panics entirely.
+KERNEL_CMDLINE="nowatchdog hardlockup_panic=0 nmi_watchdog=0 $KERNEL_CMDLINE"
+
 # Set variables
 source "$DEVICE_DB_DIR/kernel_info.sh"
 source "$DEVICE_DB_DIR/$BUILD_DEVICE_NAME.sh"
@@ -259,7 +332,7 @@ SET_ANDROIDVERSION
 script_echo " "
 script_echo "I: Clean build!"
 touch "$TOP/.config"
-make CC="$BUILD_PREF_COMPILER" mrproper 2>&1 | sed 's/^/     /' || exit_script
+make CC="$CC_BIN" "${MAKE_COMPILER_VARS[@]}" mrproper 2>&1 | sed 's/^/     /' || exit_script
 
 # Merge subconfigs. partial-security and mali are platform-independent, so they
 # use fixed names; only the GSI subconfig is selected per Android version.

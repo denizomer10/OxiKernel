@@ -19,13 +19,17 @@ ifeq ($(CONFIG_SOC_EXYNOS8895),y)
 obj-$(CONFIG_SAMSUNG_TUI)	+= platforms/exynos8895/
 endif
 ifeq ($(CONFIG_SOC_EXYNOS9610),y)
+ifeq ($(CONFIG_TZDEV),y)
 ccflags-$(CONFIG_SAMSUNG_TUI)	+= -DUSE_TEE_CLIENT_API
 ccflags-$(CONFIG_SAMSUNG_TUI)	+= -Idrivers/misc/tzdev/include/tzdev
+endif
 obj-$(CONFIG_SAMSUNG_TUI)	+= platforms/exynos9610/
 endif
 ifeq ($(CONFIG_SOC_EXYNOS9820),y)
+ifeq ($(CONFIG_TZDEV),y)
 ccflags-$(CONFIG_SAMSUNG_TUI)	+= -DUSE_TEE_CLIENT_API
 ccflags-$(CONFIG_SAMSUNG_TUI)	+= -Idrivers/misc/tzdev/include/tzdev
+endif
 obj-$(CONFIG_SAMSUNG_TUI)	+= platforms/exynos9820/
 endif
 ifeq ($(CONFIG_MACH_MT6757),y)
