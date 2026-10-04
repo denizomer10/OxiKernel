@@ -1059,7 +1059,9 @@
 	key_power: key-power {
 		samsung,pins = "gpa1-7";
 		samsung,pin-function = <0xf>;
-		samsung,pin-pud = <2>;
+		/* EXYNOS_PIN_PULL_NONE: external pull governs (values: 0=none,
+		 * 1=down, 3=up; 2 is reserved and floats the pad). */
+		samsung,pin-pud = <0>;
 		samsung,pin-drv = <0>;
 	};
 
