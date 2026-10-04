@@ -341,6 +341,22 @@ merge_config "mali"
 merge_config "variant_$BUILD_VARIANT"
 merge_config "$OXIKERNEL_GSI_SUBCONFIG"
 
+# A50-only dead-driver elimination. Merged last so its "# ... is not set"
+# entries override anything the base defconfig enabled. Strips TV tuner
+# silicon, IR remote, external USB dongles and unused filesystems that the
+# Galaxy A50 (Exynos 9610) does not have. See the file header for the full
+# preserve/remove rationale.
+merge_config "a50-optimize"
+
+# Saf AOSP / Android 16 GSI purity. Removes the Samsung TrustZone (TZDEV /
+# Teegris) TEE access channel, Trusted UI and OneUI telemetry/analytics so
+# the kernel is a pure AOSP-targeted build for the official A16 GSI. Adds the
+# remaining standard AOSP interfaces the GSI probes for (binderfs, sw_sync,
+# dma-buf, incfs, userfaultfd, seccomp, namespaces). Hardware drivers with a
+# SEC_ prefix (NFC, modem, audio, vib, gpio, ...) are intentionally kept.
+# Merged after a50-optimize so it has the final word.
+merge_config "aosp-pure"
+
 if $BUILD_KERNEL_PERMISSIVE; then
 	script_echo "WARNING! You're building this kernel in permissive mode!"
 	script_echo "         This is insecure and may make your device vulnerable."
