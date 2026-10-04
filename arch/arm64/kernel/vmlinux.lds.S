@@ -137,7 +137,6 @@ SECTIONS
 			*(.fixup)
 			*(.gnu.warning)
 			__start_sio_patches = .;
-			KEEP(*(sio_patches))
 			KEEP(*(.sio_patches))
 			__stop_sio_patches = .;
 		. = ALIGN(16);
