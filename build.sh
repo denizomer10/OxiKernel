@@ -58,8 +58,54 @@ merge_config() {
 		script_echo " "
 		exit_script
 	else
-		cat "$SUB_CONFIG_DIR/oxikernel_$1.config" >> "$BUILD_CONFIG_DIR/$BUILD_DEVICE_TMP_CONFIG"
+		# awk '1' guarantees every line (including the last) is newline-
+		# terminated, so fragments whose final line lacks a trailing
+		# newline cannot glue onto the next fragment's first line.
+		awk '1' "$SUB_CONFIG_DIR/oxikernel_$1.config" >> "$BUILD_CONFIG_DIR/$BUILD_DEVICE_TMP_CONFIG"
 	fi
+}
+
+# Collapse duplicate CONFIG_ assignments in the merged defconfig, keeping the
+# LAST occurrence of each symbol (matching the intended "later subconfig wins"
+# semantics). Without this, symbols that the base defconfig and a subconfig both
+# set produce a flood of "override: reassigning to symbol X" warnings from
+# scripts/kconfig/conf. Comments and blank lines are preserved in order.
+dedupe_merged_config() {
+	local dst="$BUILD_CONFIG_DIR/$BUILD_DEVICE_TMP_CONFIG"
+	awk '
+	{
+		line = $0
+		sym = ""
+		# Match "CONFIG_X=..." or "# CONFIG_X is not set"
+		if (match(line, /^CONFIG_[A-Za-z0-9_]+=/)) {
+			sym = substr(line, RSTART, RLENGTH - 1)
+		} else if (match(line, /^# CONFIG_[A-Za-z0-9_]+ is not set$/)) {
+			tmp = substr(line, 3)
+			sub(/ is not set$/, "", tmp)
+			sym = tmp
+		}
+		if (sym != "") {
+			order[++n] = sym
+			val[sym] = line
+			seen[sym] = 1
+		} else {
+			# Non-symbol line: keep as-is, tag with a unique key.
+			key = "__comment_" (++c)
+			order[++n] = key
+			val[key] = line
+			seen[key] = 1
+		}
+	}
+	END {
+		for (i = 1; i <= n; i++) {
+			s = order[i]
+			if (seen[s]) {
+				print val[s]
+				seen[s] = 0
+			}
+		}
+	}
+	' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
 }
 
 # Script functions
@@ -363,6 +409,12 @@ if $BUILD_KERNEL_PERMISSIVE; then
 	script_echo "         This kernel has NO RESPONSIBILITY on whatever happens next."
 	merge_config selinux-permissive
 fi
+
+# Collapse duplicate CONFIG_ assignments (base defconfig + subconfigs overlap on
+# many GSI/Android symbols). Keeps the last assignment per symbol so the
+# intended "later subconfig wins" semantics hold and scripts/kconfig/conf stops
+# emitting "override: reassigning to symbol X" warnings.
+dedupe_merged_config
 
 # Build OxiKernel
 BUILD_KERNEL

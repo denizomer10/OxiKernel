@@ -215,7 +215,7 @@ static int sysmmu_get_hw_info(struct sysmmu_drvdata *data)
 	return 0;
 }
 
-static int __init __sysmmu_secure_irq_init(struct device *sysmmu,
+static int __sysmmu_secure_irq_init(struct device *sysmmu,
 				     struct sysmmu_drvdata *drvdata)
 {
 	struct platform_device *pdev = to_platform_device(sysmmu);
@@ -249,7 +249,7 @@ static int __init __sysmmu_secure_irq_init(struct device *sysmmu,
 	return ret;
 }
 
-static int __init sysmmu_parse_tlb_way_dt(struct device *sysmmu,
+static int sysmmu_parse_tlb_way_dt(struct device *sysmmu,
 				struct sysmmu_drvdata *drvdata)
 {
 	const char *props_name = "sysmmu,tlb_property";
@@ -360,7 +360,7 @@ err_priv_id:
 	return ret;
 }
 
-static int __init sysmmu_parse_tlb_port_dt(struct device *sysmmu,
+static int sysmmu_parse_tlb_port_dt(struct device *sysmmu,
 				struct sysmmu_drvdata *drvdata)
 {
 	const char *props_name = "sysmmu,tlb_property";
@@ -439,7 +439,7 @@ err_slot_prop:
 	return ret;
 }
 
-static int __init sysmmu_parse_dt(struct device *sysmmu,
+static int sysmmu_parse_dt(struct device *sysmmu,
 				struct sysmmu_drvdata *drvdata)
 {
 	unsigned int qos = DEFAULT_QOS_VALUE;
@@ -485,7 +485,7 @@ static int __init sysmmu_parse_dt(struct device *sysmmu,
 }
 
 static struct iommu_ops exynos_iommu_ops;
-static int __init exynos_sysmmu_probe(struct platform_device *pdev)
+static int exynos_sysmmu_probe(struct platform_device *pdev)
 {
 	int irq, ret;
 	struct device *dev = &pdev->dev;

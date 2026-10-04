@@ -282,6 +282,11 @@ DTC_FLAGS += -@
 # Disable noisy checks by default
 ifeq ($(KBUILD_ENABLE_EXTRA_GCC_CHECKS),)
 DTC_FLAGS += -Wno-unit_address_vs_reg
+# Samsung DTBO overlays use fragment@N/__overlay__ nodes without reg properties
+# and rely on default #address-cells/#size-cells. These are intentional for the
+# overlay format and produce hundreds of harmless warnings on every build.
+DTC_FLAGS += -Wno-avoid_default_addr_size
+DTC_FLAGS += -Wno-reg_format
 endif
 
 # Generate an assembly file to wrap the output of the device tree compiler

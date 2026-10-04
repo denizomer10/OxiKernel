@@ -239,11 +239,6 @@ config MALI_SYSTEM_TRACE
 comment "Instrumentation options"
 	depends on MALI_MIDGARD && MALI_EXPERT
 
-choice
-	prompt "Select Performance counters set"
-	default MALI_PRFCNT_SET_PRIMARY
-	depends on MALI_MIDGARD && MALI_EXPERT
-
 config MALI_PRFCNT_SET_PRIMARY
 	bool "Primary"
 	depends on MALI_MIDGARD && MALI_EXPERT
@@ -274,7 +269,6 @@ config MALI_PRFCNT_SET_TERTIARY
 
 	  If unsure, use MALI_PRFCNT_SET_PRIMARY.
 
-endchoice
 
 config MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS
 	bool "Enable runtime selection of performance counters set via debugfs"

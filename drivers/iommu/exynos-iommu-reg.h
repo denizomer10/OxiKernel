@@ -9,7 +9,17 @@
  */
 #include "exynos-iommu.h"
 #include <dt-bindings/sysmmu/sysmmu.h>
-#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+/*
+ * sec_debug.h provides the sec_debug_set_extra_info_sysmmu() prototype (when
+ * CONFIG_SEC_DEBUG_EXTRA_INFO) or a no-op stub (otherwise). The call sites
+ * below are guarded by CONFIG_SEC_DEBUG_EXTRA_INFO, but the pr_auto() logging
+ * macros come from CONFIG_SEC_DEBUG_AUTO_COMMENT -- so the header must be
+ * pulled in whenever EITHER is enabled, otherwise the prototype disappears
+ * while the call remains and the build breaks with an implicit-declaration
+ * error. Keeping the include unconditional would also work (the header is
+ * self-guarded), but this keeps the original intent explicit.
+ */
+#if defined(CONFIG_SEC_DEBUG_EXTRA_INFO) || defined(CONFIG_SEC_DEBUG_AUTO_COMMENT)
 #include <linux/sec_debug.h>
 #endif
 
