@@ -234,7 +234,9 @@ static void exynos_cpu_err_parse(u32 reg_idx, u64 reg)
 
 static void exynos_early_panic(void *val)
 {
-	exynos_bcm_dbg_stop(PANIC_HANDLE);
+#ifdef CONFIG_EXYNOS_BCM_DBG
+        exynos_bcm_dbg_stop(PANIC_HANDLE);
+#endif
 }
 
 static void exynos_prepare_panic_entry(void *val)

@@ -136,6 +136,10 @@ SECTIONS
 			TRAMP_TEXT
 			*(.fixup)
 			*(.gnu.warning)
+			__start_sio_patches = .;
+			KEEP(*(sio_patches))
+			KEEP(*(.sio_patches))
+			__stop_sio_patches = .;
 		. = ALIGN(16);
 		*(.got)			/* Global offset table		*/
 	}
